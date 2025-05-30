@@ -4,8 +4,9 @@
 #include <string>
 #include <vector>
 
-#include "packer/packer.hpp"
 #include "packer/hasher/pico_sha2_hasher.hpp"
+#include "packer/hasher/xxhash_hasher.hpp"
+#include "packer/packer.hpp"
 #include "utils/logger.hpp"
 
 namespace fs = std::filesystem;
@@ -64,7 +65,7 @@ int main(int argc, char* argv[]) {
         }
 
         try {
-            auto hasher = std::make_unique<PicoSha2Hasher>();
+            auto hasher = std::make_unique<XxHashHasher>();
             Packer packer(std::move(hasher));
             packer.pack(src_dir, dst_file);
         } catch (const std::exception& ex) {
