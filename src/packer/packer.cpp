@@ -28,9 +28,13 @@ void Packer::pack(const fs::path& src_dir, const fs::path& pack_file) {
     write_header(out, header);
 
     // Pack files from src_dir into the pack file
-    FileTable file_table = pack_files(out, src_dir);
+    auto [file_table, files_num] = pack_files(out, src_dir);
 
-    Logger(LogLevel::INFO) << "SUMMARY: " << file_table.size() << " files packed";
+    Logger(LogLevel::INFO) << "==== SUMMARY ====";
+    Logger(LogLevel::INFO) << "Number of files: " << files_num;
+    Logger(LogLevel::INFO) << "Number of unique files: " << file_table.size();
+    Logger(LogLevel::INFO) << "Number of identical files: " << files_num - file_table.size();
+    Logger(LogLevel::INFO) << "=================";
 
     // Write FileTable
     uint64_t file_table_offset = out.tellp();
@@ -58,11 +62,14 @@ void Packer::unpack(const fs::path& pack_file, const std::filesystem::path& dst_
         unpack_file_content(in, entry, dst_dir);
     }
 
-    Logger(LogLevel::INFO) << "SUMMARY: " << file_entries.size() << " files unpacked";
+    Logger(LogLevel::INFO) << "==== SUMMARY ====";
+    Logger(LogLevel::INFO) << "Number of unique files: " << file_entries.size();
+    Logger(LogLevel::INFO) << "=================";
 }
 
-Packer::FileTable Packer::pack_files(std::ofstream& out, const std::filesystem::path& src_dir) {
+std::pair<Packer::FileTable, uint64_t> Packer::pack_files(std::ofstream& out, const std::filesystem::path& src_dir) {
     FileTable file_table;
+    uint64_t files_num = 0;
     uint64_t curr_offset = out.tellp();
 
     // Iterate over files in src_dir and:
@@ -77,6 +84,7 @@ Packer::FileTable Packer::pack_files(std::ofstream& out, const std::filesystem::
         }
 
         Logger(LogLevel::INFO) << "Packing file " << entry.path().filename();
+        files_num++;
 
         // Hash file's content to determine its uniqueness
         Logger(LogLevel::INFO) << "\tHashing first...";
@@ -102,7 +110,7 @@ Packer::FileTable Packer::pack_files(std::ofstream& out, const std::filesystem::
         Logger(LogLevel::INFO) << "Packing complete!";
     }
 
-    return file_table;
+    return {file_table, files_num};
 }
 
 void Packer::write_header(std::ofstream& out, const PackHeader& header) {

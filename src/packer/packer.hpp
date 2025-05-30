@@ -39,7 +39,7 @@ private:
     void write_header(std::ofstream& out, const PackHeader& header);
     uint64_t write_file_content(std::ofstream& out, const std::filesystem::path& file_path, uint64_t offset_in_pack);
     void write_file_table(std::ofstream& out, const FileTable& table);
-    FileTable pack_files(std::ofstream& out, const std::filesystem::path& src_dir);
+    std::pair<FileTable, uint64_t> pack_files(std::ofstream& out, const std::filesystem::path& src_dir);
 
     // Unpack helpers
     PackHeader read_header(std::ifstream& in);
