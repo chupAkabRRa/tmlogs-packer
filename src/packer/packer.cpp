@@ -20,7 +20,8 @@ void Packer::pack(const fs::path& src_dir, const fs::path& pack_file) {
         throw std::runtime_error("Cannot open packed file for write: " + pack_file.string());
     }
 
-    Logger(LogLevel::INFO) << "Packing log files into: " << pack_file.string();
+    Logger(LogLevel::INFO) << "Packing log files from " << src_dir.string()
+                           << " into: " << pack_file.string();
 
     // Write basic placeholder header into this file
     PackHeader header;
@@ -29,7 +30,7 @@ void Packer::pack(const fs::path& src_dir, const fs::path& pack_file) {
     // Pack files from src_dir into the pack file
     FileTable file_table = pack_files(out, src_dir);
 
-    Logger(LogLevel::INFO) << file_table.size() << " files packed";
+    Logger(LogLevel::INFO) << "SUMMARY: " << file_table.size() << " files packed";
 
     // Write FileTable
     uint64_t file_table_offset = out.tellp();
@@ -39,6 +40,25 @@ void Packer::pack(const fs::path& src_dir, const fs::path& pack_file) {
     header.file_table_offset = file_table_offset;
     out.seekp(0);
     write_header(out, header);
+}
+
+void Packer::unpack(const fs::path& pack_file, const std::filesystem::path& dst_dir) {
+    std::ifstream in(pack_file, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("Failed to open pack file for read: " + pack_file.string());
+    }
+
+    Logger(LogLevel::INFO) << "Unpacking files from " << pack_file.string()
+                           << " into " << dst_dir.string();
+
+    PackHeader header = read_header(in);
+    auto file_entries = read_file_table(in, header.file_table_offset);
+
+    for (const auto& entry : file_entries) {
+        unpack_file_content(in, entry, dst_dir);
+    }
+
+    Logger(LogLevel::INFO) << "SUMMARY: " << file_entries.size() << " files unpacked";
 }
 
 Packer::FileTable Packer::pack_files(std::ofstream& out, const std::filesystem::path& src_dir) {
@@ -127,24 +147,6 @@ uint64_t Packer::write_file_content(std::ofstream& out, const std::filesystem::p
         next_offset += in.gcount();
     }
     return next_offset;
-}
-
-void Packer::unpack(const fs::path& pack_file, const std::filesystem::path& dst_dir) {
-    std::ifstream in(pack_file, std::ios::binary);
-    if (!in) {
-        throw std::runtime_error("Failed to open pack file for read: " + pack_file.string());
-    }
-
-    Logger(LogLevel::INFO) << "Unpacking files info " << dst_dir.string();
-
-    PackHeader header = read_header(in);
-    auto file_entries = read_file_table(in, header.file_table_offset);
-
-    Logger(LogLevel::INFO) << file_entries.size() << " files will be unpacked";
-
-    for (const auto& entry : file_entries) {
-        unpack_file_content(in, entry, dst_dir);
-    }
 }
 
 Packer::PackHeader Packer::read_header(std::ifstream& in) {

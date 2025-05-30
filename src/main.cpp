@@ -87,8 +87,11 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        if (!fs::exists(dst_dir) || !fs::is_directory(dst_dir)) {
-            std::cerr << "Error: target directory doesn't exist or is not a directory\n";
+        if (!fs::exists(dst_dir)) {
+            std::cout << "Warning: target directory doesn't exist. Creating " << dst_dir.string() << "\n";
+            fs::create_directories(dst_dir);
+        } else if (!fs::is_directory(dst_dir)) {
+            std::cerr << "Error: target path exists but is not a directory\n";
             return 1;
         }
 
