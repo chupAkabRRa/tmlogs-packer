@@ -1,17 +1,26 @@
 #include "packer.hpp"
+
 #include <fstream>
 #include <iostream>
+
+#include "utils/logger.hpp"
 
 namespace fs = std::filesystem;
 
 Packer::Packer(std::unique_ptr<Hasher> hasher) : hasher_(std::move(hasher)) {}
 
 void Packer::pack(const fs::path& src_dir, const fs::path& pack_file) {
+    if (!hasher_) {
+        throw std::runtime_error("Cannot pack files without hasher provided\n");
+    }
+
     // Try to open final packed file for write
     std::ofstream out(pack_file, std::ios::binary);
     if (!out) {
         throw std::runtime_error("Cannot open packed file for write: " + pack_file.string());
     }
+
+    Logger(LogLevel::INFO) << "Packing log files into: " << pack_file.string();
 
     // Write basic placeholder header into this file
     PackHeader header;
@@ -19,6 +28,8 @@ void Packer::pack(const fs::path& src_dir, const fs::path& pack_file) {
 
     // Pack files from src_dir into the pack file
     FileTable file_table = pack_files(out, src_dir);
+
+    Logger(LogLevel::INFO) << file_table.size() << " files packed";
 
     // Write FileTable
     uint64_t file_table_offset = out.tellp();
@@ -45,11 +56,13 @@ Packer::FileTable Packer::pack_files(std::ofstream& out, const std::filesystem::
             continue;
         }
 
-        std::cout << "Packing file '" << entry.path().filename() << "'\n"; 
+        Logger(LogLevel::INFO) << "Packing file " << entry.path().filename();
 
-        std::cout << "Hashing....";
+        // Hash file's content to determine its uniqueness
+        Logger(LogLevel::INFO) << "\tHashing first...";
         std::string file_hash = hasher_->compute_hash(entry.path());
-        std::cout << " done!\n";
+        Logger(LogLevel::INFO) << "\tHashing complete!";
+        // Collect other file data
         uint64_t file_size = fs::file_size(entry.path());
         std::string rel_path = fs::relative(entry.path(), src_dir).string();
 
@@ -58,13 +71,17 @@ Packer::FileTable Packer::pack_files(std::ofstream& out, const std::filesystem::
         if (file_table.find(file_hash) != file_table.end()) {
             // Found? No need to store the data, just extend the array with paths
             it->second.file_paths.push_back(rel_path);
+            Logger(LogLevel::INFO) << "\tFile with similar content discovered. No need to pack";
         } else {
             file_table[file_hash] = FileTableEntry{{rel_path}, file_size, curr_offset};
-            std::cout << "Writing....";
+            Logger(LogLevel::INFO) << "\tMoving to pack file...";
             curr_offset = write_file_content(out, entry.path(), curr_offset);
-            std::cout << " done!\n";
+            Logger(LogLevel::INFO) << "\tMoving complete!";
         }
+
+        Logger(LogLevel::INFO) << "Packing complete!";
     }
+
     return file_table;
 }
 
@@ -118,8 +135,12 @@ void Packer::unpack(const fs::path& pack_file, const std::filesystem::path& dst_
         throw std::runtime_error("Failed to open pack file for read: " + pack_file.string());
     }
 
+    Logger(LogLevel::INFO) << "Unpacking files info " << dst_dir.string();
+
     PackHeader header = read_header(in);
     auto file_entries = read_file_table(in, header.file_table_offset);
+
+    Logger(LogLevel::INFO) << file_entries.size() << " files will be unpacked";
 
     for (const auto& entry : file_entries) {
         unpack_file_content(in, entry, dst_dir);
@@ -183,6 +204,8 @@ void Packer::unpack_file_content(std::ifstream& in, const FileTableEntry& entry,
 
         in.seekg(entry.data_offset);
 
+        Logger(LogLevel::INFO) << "Unpacking " << full_path.string();
+
          // 4 MB buffer by default
         const std::size_t BufferSize = 4096 * 1024;
         std::vector<char> buffer(BufferSize);
@@ -193,5 +216,7 @@ void Packer::unpack_file_content(std::ifstream& in, const FileTableEntry& entry,
             out.write(buffer.data(), to_read);
             remaining -= to_read;
         }
+
+        Logger(LogLevel::INFO) << "Unpacking complete!";
     }
 }

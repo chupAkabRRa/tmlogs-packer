@@ -9,6 +9,7 @@ include_directories(
     src/packer
     src/packer/hasher
     src/third_party
+    src/utils
 )
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
