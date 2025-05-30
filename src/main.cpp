@@ -47,7 +47,35 @@ int main(int argc, char* argv[]) {
             packer.pack(src_dir, dst_file);
         } catch (const std::exception& ex) {
             std::cerr << "Packing failed: " << ex.what() << "\n";
-            std::cerr << "Feel really sorry for the time traveler :(\n";
+            std::cerr << "Feel really sorry for the time traveller :(\n";
+            return 1;
+        }
+    } else if (command == "unpack") {
+        if (argc != 4) {
+            std::cerr << "Error: invalid arguments for 'unpack' command\n";
+            help();
+            return 1;
+        }
+
+        fs::path pack_file = argv[2];
+        fs::path dst_dir = argv[3];
+
+        if (!fs::exists(pack_file) || !fs::is_regular_file(pack_file)) {
+            std::cerr << "Error: pack file doesn't exist or is not a file\n";
+            return 1;
+        }
+
+        if (!fs::exists(dst_dir) || !fs::is_directory(dst_dir)) {
+            std::cerr << "Error: target directory doesn't exist or is not a directory\n";
+            return 1;
+        }
+
+        try {
+            Packer packer;
+            packer.unpack(pack_file, dst_dir);
+        } catch (const std::exception& ex) {
+            std::cerr << "Unpacking failed: " << ex.what() << "\n";
+            std::cerr << "Feel really sorry for the time traveller :(\n";
             return 1;
         }
     } else {
