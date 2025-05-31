@@ -43,7 +43,7 @@ private:
 
     // Unpack helpers
     PackHeader read_header(std::ifstream& in);
-    std::vector<FileTableEntry> read_file_table(std::ifstream& in, uint64_t table_offset);
+    std::pair<std::vector<FileTableEntry>, uint64_t> read_file_table(std::ifstream& in, uint64_t table_offset);
     void unpack_file_content(std::ifstream& in, const FileTableEntry& entry, const std::filesystem::path& dst_dir);
 
     std::unique_ptr<Hasher> hasher_;

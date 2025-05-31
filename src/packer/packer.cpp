@@ -28,12 +28,12 @@ void Packer::pack(const fs::path& src_dir, const fs::path& pack_file) {
     write_header(out, header);
 
     // Pack files from src_dir into the pack file
-    auto [file_table, files_num] = pack_files(out, src_dir);
+    auto [file_table, num_of_files] = pack_files(out, src_dir);
 
     Logger(LogLevel::INFO) << "==== SUMMARY ====";
-    Logger(LogLevel::INFO) << "Number of files: " << files_num;
-    Logger(LogLevel::INFO) << "Number of unique files: " << file_table.size();
-    Logger(LogLevel::INFO) << "Number of identical files: " << files_num - file_table.size();
+    Logger(LogLevel::INFO) << "Number of files processed: " << num_of_files;
+    Logger(LogLevel::INFO) << "Number of unique files packed: " << file_table.size();
+    Logger(LogLevel::INFO) << "Number of identical files: " << num_of_files - file_table.size();
     Logger(LogLevel::INFO) << "=================";
 
     // Write FileTable
@@ -56,14 +56,16 @@ void Packer::unpack(const fs::path& pack_file, const std::filesystem::path& dst_
                            << " into " << dst_dir.string();
 
     PackHeader header = read_header(in);
-    auto file_entries = read_file_table(in, header.file_table_offset);
+    auto [file_table, num_of_files]  = read_file_table(in, header.file_table_offset);
 
-    for (const auto& entry : file_entries) {
+    for (const auto& entry : file_table) {
         unpack_file_content(in, entry, dst_dir);
     }
 
     Logger(LogLevel::INFO) << "==== SUMMARY ====";
-    Logger(LogLevel::INFO) << "Number of unique files: " << file_entries.size();
+    Logger(LogLevel::INFO) << "Number of files processed: " << num_of_files;
+    Logger(LogLevel::INFO) << "Number of unique files unpacked: " << file_table.size();
+    Logger(LogLevel::INFO) << "Number of identical files: " << num_of_files - file_table.size();
     Logger(LogLevel::INFO) << "=================";
 }
 
@@ -166,7 +168,8 @@ Packer::PackHeader Packer::read_header(std::ifstream& in) {
     return header;
 }
 
-std::vector<Packer::FileTableEntry> Packer::read_file_table(std::ifstream& in, uint64_t file_table_offset) {
+std::pair<std::vector<Packer::FileTableEntry>, uint64_t> Packer::read_file_table(
+    std::ifstream& in, uint64_t file_table_offset) {
     in.seekg(file_table_offset);
 
     char marker[9];
@@ -175,6 +178,7 @@ std::vector<Packer::FileTableEntry> Packer::read_file_table(std::ifstream& in, u
         throw std::runtime_error("Invalid pack format: missing file table marker");
     }
 
+    uint64_t num_of_files = 0;
     uint64_t entry_count;
     in.read(reinterpret_cast<char*>(&entry_count), sizeof(entry_count));
 
@@ -190,6 +194,8 @@ std::vector<Packer::FileTableEntry> Packer::read_file_table(std::ifstream& in, u
             std::string path(path_len, '\0');
             in.read(&path[0], path_len);
             paths.push_back(path);
+            // Each path new path means new file (not necessarily unique)
+            num_of_files++;
         }
 
         uint64_t size;
@@ -199,7 +205,7 @@ std::vector<Packer::FileTableEntry> Packer::read_file_table(std::ifstream& in, u
 
         file_entries.emplace_back(FileTableEntry{paths, size, offset});
     }
-    return file_entries;
+    return {file_entries, num_of_files};
 }
 
 void Packer::unpack_file_content(std::ifstream& in, const FileTableEntry& entry, const fs::path& dst_dir) {
