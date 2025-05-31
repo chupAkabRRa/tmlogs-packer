@@ -7,7 +7,10 @@
 
 namespace fs = std::filesystem;
 
-Packer::Packer(std::unique_ptr<Hasher> hasher) : hasher_(std::move(hasher)) {}
+Packer::Packer() : buffer_(BufferSize) {}
+
+Packer::Packer(std::unique_ptr<Hasher> hasher) : hasher_(std::move(hasher)),
+                                                 buffer_(BufferSize) {}
 
 void Packer::pack(const fs::path& src_dir, const fs::path& pack_file) {
     if (!hasher_) {
@@ -103,10 +106,10 @@ std::pair<Packer::FileTable, uint64_t> Packer::pack_files(std::ofstream& out, co
             it->second.file_paths.push_back(rel_path);
             Logger(LogLevel::INFO) << "\tFile with similar content discovered. No need to pack";
         } else {
+            Logger(LogLevel::INFO) << "\tCopying to pack file...";
             file_table[file_hash] = FileTableEntry{{rel_path}, file_size, curr_offset};
-            Logger(LogLevel::INFO) << "\tMoving to pack file...";
             curr_offset = write_file_content(out, entry.path(), curr_offset);
-            Logger(LogLevel::INFO) << "\tMoving complete!";
+            Logger(LogLevel::INFO) << "\tCopying complete!";
         }
 
         Logger(LogLevel::INFO) << "Packing complete!";
@@ -139,21 +142,19 @@ void Packer::write_file_table(std::ofstream& out, const FileTable& file_table) {
     }
 }
 
-uint64_t Packer::write_file_content(std::ofstream& out, const std::filesystem::path& file_path, uint64_t offset_in_pack) {
+uint64_t Packer::write_file_content(std::ofstream& out,
+                                    const std::filesystem::path& file_path,
+                                    uint64_t offset_in_pack) {
     std::ifstream in(file_path, std::ios::binary);
     if (!in) {
         // What shall we do about it? Should it be recoverable?
         throw std::runtime_error("Failed to open log file for read: " + file_path.string());
     }
 
-    // 4 MB buffer by default
-    const std::size_t BufferSize = 4096 * 1024;
-    std::vector<char> buffer(BufferSize);
-
     out.seekp(offset_in_pack);
     uint64_t next_offset = offset_in_pack;
-    while (in.read(buffer.data(), buffer.size()) || in.gcount()) {
-        out.write(buffer.data(), in.gcount());
+    while (in.read(buffer_.data(), buffer_.size()) || in.gcount()) {
+        out.write(buffer_.data(), in.gcount());
         next_offset += in.gcount();
     }
     return next_offset;
@@ -208,7 +209,9 @@ std::pair<std::vector<Packer::FileTableEntry>, uint64_t> Packer::read_file_table
     return {file_entries, num_of_files};
 }
 
-void Packer::unpack_file_content(std::ifstream& in, const FileTableEntry& entry, const fs::path& dst_dir) {
+void Packer::unpack_file_content(std::ifstream& in,
+                                 const FileTableEntry& entry,
+                                 const fs::path& dst_dir) {
     for (const auto& relative_path : entry.file_paths) {
         fs::path full_path = dst_dir / relative_path;
         fs::create_directories(full_path.parent_path());
@@ -222,14 +225,11 @@ void Packer::unpack_file_content(std::ifstream& in, const FileTableEntry& entry,
 
         Logger(LogLevel::INFO) << "Unpacking " << full_path.string();
 
-         // 4 MB buffer by default
-        const std::size_t BufferSize = 4096 * 1024;
-        std::vector<char> buffer(BufferSize);
         uint64_t remaining = entry.file_size;
         while (remaining > 0) {
-            uint64_t to_read = std::min<uint64_t>(buffer.size(), remaining);
-            in.read(buffer.data(), to_read);
-            out.write(buffer.data(), to_read);
+            uint64_t to_read = std::min<uint64_t>(buffer_.size(), remaining);
+            in.read(buffer_.data(), to_read);
+            out.write(buffer_.data(), to_read);
             remaining -= to_read;
         }
 

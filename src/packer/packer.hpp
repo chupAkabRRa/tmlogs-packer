@@ -9,7 +9,7 @@
 
 class Packer {
 public:
-    Packer() = default;
+    Packer();
     Packer(std::unique_ptr<Hasher> hasher);
     void pack(const std::filesystem::path& src_dir, const std::filesystem::path& pack_file);
     void unpack(const std::filesystem::path& pack_file, const std::filesystem::path& dst_dir);
@@ -47,4 +47,7 @@ private:
     void unpack_file_content(std::ifstream& in, const FileTableEntry& entry, const std::filesystem::path& dst_dir);
 
     std::unique_ptr<Hasher> hasher_;
+    std::vector<char> buffer_;
+
+    static constexpr std::size_t BufferSize = 4096 * 1024; 
 };
