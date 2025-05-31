@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -19,6 +20,68 @@ void help() {
     std::cout << "\tpack\tPacks the source directory into the specified archive file\n";
     std::cout << "\tunpack\tUnpacks the archive into the target directory\n";
     std::cout << "\t--log-level\tLogging level: error, warning, info, none (default: info)";
+}
+
+int handle_pack_cmd(const std::vector<std::string>& args) {
+    if (args.size() != 2) {
+        std::cerr << "Error: invalid arguments for 'pack' command\n";
+        help();
+        return 1;
+    }
+
+    fs::path src_dir = args[0];
+    fs::path dst_file = args[1];
+
+    if (!fs::exists(src_dir) || !fs::is_directory(src_dir)) {
+        std::cerr << "Error: source directory doesn't exist or is not a directory\n";
+        return 1;
+    }
+
+    try {
+        Packer packer(std::make_unique<XxHashHasher>());
+        packer.pack(src_dir, dst_file);
+    } catch (const std::exception& ex) {
+        std::cerr << "Packing failed: " << ex.what() << "\n";
+        std::cerr << "Feel really sorry for the time traveller :(\n";
+        return 1;
+    }
+
+    return 0;
+}
+
+int handle_unpack_cmd(const std::vector<std::string>& args) {
+    if (args.size() != 2) {
+        std::cerr << "Error: invalid arguments for 'unpack' command\n";
+        help();
+        return 1;
+    }
+
+    fs::path pack_file = args[0];
+    fs::path dst_dir = args[1];
+
+    if (!fs::exists(pack_file) || !fs::is_regular_file(pack_file)) {
+        std::cerr << "Error: pack file doesn't exist or is not a file\n";
+        return 1;
+    }
+
+    if (!fs::exists(dst_dir)) {
+        std::cout << "Warning: target directory doesn't exist. Creating " << dst_dir.string() << "\n";
+        fs::create_directories(dst_dir);
+    } else if (!fs::is_directory(dst_dir)) {
+        std::cerr << "Error: target path exists but is not a directory\n";
+        return 1;
+    }
+
+    try {
+        Packer packer;
+        packer.unpack(pack_file, dst_dir);
+    } catch (const std::exception& ex) {
+        std::cerr << "Unpacking failed: " << ex.what() << "\n";
+        std::cerr << "Feel really sorry for the time traveller :(\n";
+        return 1;
+    }
+
+    return 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -49,66 +112,19 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (command == "pack") {
-        if (args.size() != 2) {
-            std::cerr << "Error: invalid arguments for 'pack' command\n";
-            help();
-            return 1;
-        }
+    // Table of command handlers
+    // Each new command should register its own handler here to be processed
+    using CommandHandler = std::function<int(const std::vector<std::string>&)>;
+    std::unordered_map<std::string, CommandHandler> handlers{
+        {"pack", handle_pack_cmd},
+        {"unpack", handle_unpack_cmd}
+    };
 
-        fs::path src_dir = args[0];
-        fs::path dst_file = args[1];
-
-        if (!fs::exists(src_dir) || !fs::is_directory(src_dir)) {
-            std::cerr << "Error: source directory doesn't exist or is not a directory\n";
-            return 1;
-        }
-
-        try {
-            auto hasher = std::make_unique<XxHashHasher>();
-            Packer packer(std::move(hasher));
-            packer.pack(src_dir, dst_file);
-        } catch (const std::exception& ex) {
-            std::cerr << "Packing failed: " << ex.what() << "\n";
-            std::cerr << "Feel really sorry for the time traveller :(\n";
-            return 1;
-        }
-    } else if (command == "unpack") {
-        if (args.size() != 2) {
-            std::cerr << "Error: invalid arguments for 'unpack' command\n";
-            help();
-            return 1;
-        }
-
-        fs::path pack_file = args[0];
-        fs::path dst_dir = args[1];
-
-        if (!fs::exists(pack_file) || !fs::is_regular_file(pack_file)) {
-            std::cerr << "Error: pack file doesn't exist or is not a file\n";
-            return 1;
-        }
-
-        if (!fs::exists(dst_dir)) {
-            std::cout << "Warning: target directory doesn't exist. Creating " << dst_dir.string() << "\n";
-            fs::create_directories(dst_dir);
-        } else if (!fs::is_directory(dst_dir)) {
-            std::cerr << "Error: target path exists but is not a directory\n";
-            return 1;
-        }
-
-        try {
-            Packer packer;
-            packer.unpack(pack_file, dst_dir);
-        } catch (const std::exception& ex) {
-            std::cerr << "Unpacking failed: " << ex.what() << "\n";
-            std::cerr << "Feel really sorry for the time traveller :(\n";
-            return 1;
-        }
-    } else {
+    auto cmd_handler = handlers.find(command);
+    if (cmd_handler == handlers.end()) {
         std::cerr << "Error: unknow command provided '" << command << "'\n";
         help();
         return 1;
     }
-
-    return 0;
+    return cmd_handler->second(args);
 }
